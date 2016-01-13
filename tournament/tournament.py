@@ -2,18 +2,6 @@
 # 
 # tournament.py -- implementation of a Swiss-system tournament
 #
-tablequery_players = """create table players (
-id serial primary key,
-name text
-);"""
-
-tablequery_matches = """
-
-"""
-
-tablequery_score = """create table score (
-
-);"""
 
 import psycopg2
 
@@ -42,9 +30,6 @@ class Database():
 
     def getRows(self):
         return self.cursor.fetchall()
-
- 
-
 
 
 def commit_query(query, database_object):
@@ -94,8 +79,6 @@ def countPlayers():
     return count
 
 
-
-
 def registerPlayer(name):
     """Adds a player to the tournament database.
   
@@ -125,6 +108,7 @@ def registerPlayer(name):
 
 
 def playerStandings():
+    # TESTED - WORKS!
     """Returns a list of the players and their win records, sorted by wins.
 
     The first entry in the list should be the player in first place, or a player
@@ -137,8 +121,13 @@ def playerStandings():
         wins: the number of matches the player has won
         matches: the number of matches the player has played
     """
-    pass
 
+    query = "select players.id, players.name, scores.wins, subq.n_matches from players join scores on scores.id = players.id join (select id, count(*) as n_matches from matches group by id) as subq on players.id = subq.id order by scores.wins desc;"
+    with Database() as db_obj:
+        db_obj.makeQuery(query)
+        return db_obj.getRows()
+
+print playerStandings()
 
 def reportMatch(winner, loser):
     """Records the outcome of a single match between two players.
@@ -147,7 +136,25 @@ def reportMatch(winner, loser):
       winner:  the id number of the player who won
       loser:  the id number of the player who lost
     """
-    pass
+    with Database() as db_obj:
+        # enter winner's match
+        query = "insert into matches values({0},{1},{2},{3});".format(winner,0,'True',loser)
+        commit_query(query, db_obj)
+
+        # enter loser's match
+        query = "insert into matches values({0},{1},{2},{3});".format(loser,0,'False',winner)
+        commit_query(query, db_obj)
+
+        # gets updated score of winner
+        query = "select n_wins from (select id, count(*) as n_wins from matches where win=True group by id) as subq where id={0};".format(winner)
+        commit_query(query, db_obj)
+        n_wins = db_obj.getRows()[0][0]
+
+        # update score of winner
+        query = """update scores
+        set wins={0}
+        where id={1}""".format(n_wins, winner)
+    return
  
  
 def swissPairings():
@@ -165,7 +172,17 @@ def swissPairings():
         id2: the second player's unique id
         name2: the second player's name
     """
-    pass
+    pairings = []
+    for idx, row in enumerate(playerStandings()):
+        current_id, current_name, current_wins, current_n_matches = row 
+        if idx % 2 == 0:
+            # even row -- start constructing matchup
+            id1, name1 = current_id, current_name
+        else:
+            # odd row -- finish matchtup
+            id2, name2 = current_id, current_name
+            pairings.append((id1, name1, id2, name2))
+    return pairings
 
-print countPlayers()
+print swissPairings()
 
